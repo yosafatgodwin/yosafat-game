@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Cari Pria Berbaju Merah Putih!</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #f0fdf4;
+            /* Perbaikan khusus untuk iOS & HP agar tidak bisa seleksi teks/muncul menu aneh */
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            -khtml-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+            touch-action: none;
+        }
+        canvas {
+            display: block;
+            cursor: crosshair;
+            touch-action: none; /* Mencegah scroll saat menyentuh canvas */
+        }
+        button {
+            cursor: pointer;
+            /* Memastikan tombol selalu bisa di-tap di iOS */
+            touch-action: manipulation; 
+        }
+        .modal {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 50;
+        }
+        .hidden {
+            display: none !important;
+        }
+        /* Animasi Spinner AI */
+        .spinner {
+            border: 3px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top: 3px solid #3b82f6;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            vertical-align: middle;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="font-sans text-gray-800">
+
+    <!-- Top Info Bar -->
+    <div id="ui-bar" class="absolute top-0 left-0 w-full p-4 flex justify-between items-start pointer-events-none z-10 hidden">
+        <div class="flex flex-col gap-2 pointer-events-auto">
+            <div class="bg-white/90 px-3 py-1 sm:px-4 sm:py-2 rounded-lg shadow font-bold text-base sm:text-lg border-2 border-gray-200">
+                Level: <span id="level-display" class="text-blue-600">1</span>
+            </div>
+            <button id="hint-btn" onclick="requestAIHint()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 sm:px-4 sm:py-2 rounded-lg shadow-lg font-bold text-xs sm:text-sm transition transform hover:scale-105 flex items-center gap-2">
+                <span>✨</span> Petunjuk AI
+            </button>
+        </div>
+        <div class="bg-red-100 border border-red-400 text-red-700 px-3 py-1 sm:px-4 sm:py-2 rounded-lg shadow font-bold text-sm sm:text-lg hidden pointer-events-auto" id="wrong-click-msg">
+            Bukan dia!
+        </div>
+    </div>
+
+    <!-- AI Hint Toast -->
+    <div id="ai-toast" class="absolute bottom-10 left-1/2 transform -translate-x-1/2 bg-indigo-900/90 text-white px-4 py-3 sm:px-6 sm:py-4 rounded-xl shadow-2xl max-w-md w-11/12 text-center pointer-events-none transition-opacity duration-300 hidden z-30 border-2 border-indigo-400">
+        <div class="font-bold text-indigo-200 text-xs sm:text-sm mb-1 uppercase tracking-wide flex justify-center items-center gap-2">
+            <span>✨</span> Detektif AI <span>✨</span>
+        </div>
+        <p id="ai-toast-text" class="text-sm sm:text-lg"></p>
+    </div>
+
+    <!-- Main Game Canvas -->
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- Main Menu / Start Screen -->
+    <div id="start-screen" class="modal">
+        <div class="bg-white p-6 sm:p-8 rounded-2xl shadow-2xl text-center max-w-md w-11/12 border-4 border-blue-100 pointer-events-auto">
+            <h1 class="text-3xl sm:text-4xl font-extrabold mb-2 text-red-600 tracking-tight">Cari Pria Itu!</h1>
+            <p class="mb-4 sm:mb-6 text-gray-600 text-base sm:text-lg">Temukan pria berbaju belang merah putih dan berkacamata di tengah kerumunan yang <b>sedang berjalan</b>.</p>
+            <div class="bg-indigo-50 rounded-lg p-3 sm:p-4 mb-4 sm:mb-6 border border-indigo-100">
+                <p class="text-indigo-800 font-semibold text-xs sm:text-sm flex items-center justify-center gap-2">
+                    <span>✨</span> Didukung oleh Gemini AI
+                </p>
+                <p class="text-[10px] sm:text-xs text-indigo-600 mt-1">Misi dan petunjuk dibuat secara dinamis!</p>
+            </div>
+            <button onclick="startGame()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-full transition transform hover:scale-105 shadow-lg text-base sm:text-lg w-full touch-manipulation">
+                Mulai Bermain
+            </button>
+        </div>
+    </div>
+
+    <!-- Preview Screen -->
+    <div id="preview-screen" class="modal hidden">
+        <div class="bg-white p-6 sm:p-8 rounded-2xl shadow-2xl text-center max-w-sm w-11/12 flex flex-col items-center pointer-events-auto">
+            <h2 class="text-xl sm:text-2xl font-bold mb-2 text-gray-800">Target Anda</h2>
+            
+            <!-- AI Mission Box -->
+            <div id="mission-box" class="min-h-[60px] flex items-center justify-center mb-4 w-full bg-blue-50 p-3 rounded-lg border border-blue-100">
+                <div id="mission-loading" class="text-blue-500 font-medium text-xs sm:text-sm">
+                    <div class="spinner mr-2"></div> Menghubungkan ke AI...
+                </div>
+                <p id="mission-text" class="text-xs sm:text-sm text-gray-700 italic font-medium hidden"></p>
+            </div>
+            
+            <canvas id="previewCanvas" width="120" height="160" class="mb-4 sm:mb-6 bg-gray-50 rounded-xl border-2 border-gray-200"></canvas>
+            
+            <button id="ready-btn" onclick="startLevel()" class="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-8 rounded-full transition transform hover:scale-105 shadow-lg w-full text-base sm:text-lg opacity-50 cursor-not-allowed touch-manipulation" disabled>
+                Tunggu Misi...
+            </button>
+        </div>
+    </div>
+
+    <!-- Level Complete Screen -->
+    <div id="level-complete-screen" class="modal hidden">
+        <div class="bg-white p-6 sm:p-8 rounded-2xl shadow-2xl text-center max-w-sm w-11/12 border-4 border-green-100 pointer-events-auto">
+            <h2 class="text-3xl sm:text-4xl font-black mb-2 text-green-500">Ketemu!</h2>
+            <p class="mb-4 sm:mb-6 text-gray-600 text-base sm:text-lg">Kerja bagus! Kerumunan akan bertambah ramai dan cepat sekarang.</p>
+            <button onclick="prepareLevel()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-full transition transform hover:scale-105 shadow-lg w-full text-base sm:text-lg touch-manipulation">
+                Lanjut Level <span id="next-level-num">2</span>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // --- GEMINI API CONFIGURATION ---
+        const apiKey = ""; // API Key otomatis dari environment
+        
+        async function callGeminiAPI(promptText) {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+            const payload = { contents: [{ parts: [{ text: promptText }] }] };
+
+            let retries = 0;
+            const maxRetries = 5;
+            const delays = [1000, 2000, 4000, 8000, 16000];
+
+            while (retries <= maxRetries) {
+                try {
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                    const data = await response.json();
+                    return data.candidates?.[0]?.content?.parts?.[0]?.text || "Respon AI kosong.";
+                } catch (error) {
+                    if (retries === maxRetries) return "Koneksi ke Markas AI terputus. Lanjutkan pencarian!";
+                    await new Promise(resolve => setTimeout(resolve, delays[retries]));
+                    retries++;
+                }
+            }
+        }
+        // ---------------------------------
+
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const previewCanvas = document.getElementById('previewCanvas');
+        const previewCtx = previewCanvas.getContext('2d');
+
+        // UI Elements
+        const startScreen = document.getElementById('start-screen');
+        const previewScreen = document.getElementById('preview-screen');
+        const levelCompleteScreen = document.getElementById('level-complete-screen');
+        const uiBar = document.getElementById('ui-bar');
+        const levelDisplay = document.getElementById('level-display');
+        const nextLevelNum = document.getElementById('next-level-num');
+        const wrongClickMsg = document.getElementById('wrong-click-msg');
+        const missionLoading = document.getElementById('mission-loading');
+        const missionText = document.getElementById('mission-text');
+        const readyBtn = document.getElementById('ready-btn');
+        const hintBtn = document.getElementById('hint-btn');
+        const aiToast = document.getElementById('ai-toast');
+        const aiToastText = document.getElementById('ai-toast-text');
+
+        // Game State
+        let currentLevel = 1;
+        let isPlaying = false;
+        let crowd = [];
+        let target = null;
+        let scaleMultiplier = 1;
+        let animationId = null;
+        let baseScale = 1;
+
+        // Colors
+        const shirtColors = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#64748b', '#000000', '#ffffff'];
+        const pantsColors = ['#1e3a8a', '#064e3b', '#78350f', '#000000', '#475569'];
+        const skinColors = ['#fca5a5', '#fdba74', '#fcd34d', '#d6d3d1', '#a8a29e', '#78716c'];
+
+        // Responsiveness Helper
+        function getBaseScale() {
+            if (window.innerWidth < 600) {
+                return window.innerWidth / 700; 
+            }
+            return 1;
+        }
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            
+            baseScale = getBaseScale();
+            scaleMultiplier = Math.max(0.3, baseScale - (currentLevel * 0.05));
+
+            if (crowd && crowd.length > 0) {
+                const paddingX = 40 * scaleMultiplier;
+                const paddingY = 90 * scaleMultiplier;
+                for (let person of crowd) {
+                    person.x = Math.max(paddingX, Math.min(person.x, canvas.width - paddingX));
+                    person.y = Math.max(paddingY, Math.min(person.y, canvas.height - paddingY));
+                }
+            }
+
+            if (isPlaying) drawGame();
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        const targetConfig = {
+            isTarget: true, shirtPattern: 'striped', shirtColor1: '#ef4444', shirtColor2: '#ffffff', 
+            pantsColor: '#1e40af', skinColor: '#fed7aa', hasGlasses: true, hasHat: true, 
+            hatColor1: '#ef4444', hatColor2: '#ffffff'
+        };
+
+        function startGame() {
+            currentLevel = 1;
+            startScreen.classList.add('hidden');
+            prepareLevel();
+        }
+
+        async function prepareLevel() {
+            levelCompleteScreen.classList.add('hidden');
+            uiBar.classList.add('hidden');
+            
+            baseScale = getBaseScale();
+            scaleMultiplier = Math.max(0.3, baseScale - (currentLevel * 0.05));
+            
+            previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+            drawCharacter(previewCtx, previewCanvas.width / 2, previewCanvas.height - 30, 2, targetConfig, 0);
+            
+            missionLoading.classList.remove('hidden');
+            missionText.classList.add('hidden');
+            readyBtn.disabled = true;
+            readyBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            readyBtn.textContent = "Tunggu Misi...";
+            
+            previewScreen.classList.remove('hidden');
+
+            const prompt = `Buatkan 1 alasan lucu dan konyol (maks. 15 kata) kenapa pemain harus menangkap pria berbaju belang merah putih berkacamata ini. Bahasa Indonesia santai.`;
+            const aiBriefing = await callGeminiAPI(prompt);
+            
+            missionText.textContent = `✨ "${aiBriefing.replace(/"/g, '')}"`;
+            missionLoading.classList.add('hidden');
+            missionText.classList.remove('hidden');
+            
+            readyBtn.disabled = false;
+            readyBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            readyBtn.textContent = "Aku Siap!";
+        }
+
+        function startLevel() {
+            previewScreen.classList.add('hidden');
+            uiBar.classList.remove('hidden');
+            levelDisplay.textContent = currentLevel;
+            
+            generateCrowd();
+            isPlaying = true;
+            
+            if (animationId) cancelAnimationFrame(animationId);
+            gameLoop();
+        }
+
+        function gameLoop() {
+            if (!isPlaying) return; 
+            updatePositions();
+            drawGame();
+            animationId = requestAnimationFrame(gameLoop);
+        }
+
+        function updatePositions() {
+            const paddingX = 40 * scaleMultiplier;
+            const paddingY = 90 * scaleMultiplier;
+
+            for (let person of crowd) {
+                person.x += person.vx;
+                person.y += person.vy;
+                person.walkPhase += person.speed * 0.2;
+
+                if (person.x < paddingX || person.x > canvas.width - paddingX) {
+                    person.vx *= -1; 
+                    person.x = Math.max(paddingX, Math.min(person.x, canvas.width - paddingX)); 
+                }
+                if (person.y < paddingY || person.y > canvas.height - paddingY) {
+                    person.vy *= -1; 
+                    person.y = Math.max(paddingY, Math.min(person.y, canvas.height - paddingY));
+                }
+            }
+            crowd.sort((a, b) => a.y - b.y);
+        }
+
+        async function requestAIHint() {
+            if (!isPlaying || !target) return;
+            
+            hintBtn.disabled = true;
+            hintBtn.innerHTML = `<div class="spinner"></div> Berpikir...`;
+            
+            let xPos = target.x < canvas.width / 3 ? 'sebelah kiri' : (target.x > 2 * canvas.width / 3 ? 'sebelah kanan' : 'di tengah-tengah');
+            let yPos = target.y < canvas.height / 3 ? 'bagian atas' : (target.y > 2 * canvas.height / 3 ? 'bagian bawah' : 'area tengah');
+            
+            const prompt = `Dalam game cari orang, target sedang berjalan-jalan di ${xPos} dan ${yPos} layar. Berikan 1 kalimat petunjuk bergaya detektif yang misterius namun sedikit lucu (maksimal 15 kata) mengarahkan pandangan ke sana tanpa menyebutkan koordinat pasti. Bahasa Indonesia.`;
+
+            const aiHint = await callGeminiAPI(prompt);
+            
+            aiToastText.textContent = `"${aiHint.replace(/"/g, '')}"`;
+            aiToast.classList.remove('hidden');
+            
+            hintBtn.disabled = false;
+            hintBtn.innerHTML = `<span>✨</span> Petunjuk AI`;
+
+            setTimeout(() => { aiToast.classList.add('hidden'); }, 6000);
+        }
+
+        function generateRandomConfig() {
+            const isTricky = Math.random() > 0.6; 
+            let config = {
+                isTarget: false,
+                shirtPattern: Math.random() > 0.5 ? 'solid' : 'striped',
+                shirtColor1: shirtColors[Math.floor(Math.random() * shirtColors.length)],
+                shirtColor2: shirtColors[Math.floor(Math.random() * shirtColors.length)],
+                pantsColor: pantsColors[Math.floor(Math.random() * pantsColors.length)],
+                skinColor: skinColors[Math.floor(Math.random() * skinColors.length)],
+                hasGlasses: Math.random() > 0.7,
+                hasHat: Math.random() > 0.5,
+                hatColor1: shirtColors[Math.floor(Math.random() * shirtColors.length)],
+                hatColor2: shirtColors[Math.floor(Math.random() * shirtColors.length)]
+            };
+
+            if (isTricky) {
+                const trickType = Math.floor(Math.random() * 3);
+                if (trickType === 0) {
+                    config.shirtPattern = 'striped'; config.shirtColor1 = '#ef4444'; config.shirtColor2 = '#ffffff'; config.hasGlasses = false;
+                } else if (trickType === 1) {
+                    config.hasGlasses = true; config.hasHat = true;
+                } else {
+                    config.shirtPattern = 'solid'; config.shirtColor1 = '#ef4444'; config.hasGlasses = true;
+                }
+            }
+            return config;
+        }
+
+        function generateCrowd() {
+            crowd = [];
+            const peopleCount = 50 + (currentLevel * 35);
+            const paddingX = 40 * scaleMultiplier;
+            const paddingY = 90 * scaleMultiplier;
+
+            const targetSpeed = (0.5 + Math.random() * 1.5) * scaleMultiplier; 
+            const targetAngle = Math.random() * Math.PI * 2; 
+            target = {
+                x: paddingX + Math.random() * (canvas.width - paddingX * 2),
+                y: paddingY + Math.random() * (canvas.height - paddingY * 2),
+                vx: Math.cos(targetAngle) * targetSpeed,
+                vy: Math.sin(targetAngle) * targetSpeed,
+                speed: targetSpeed,
+                walkPhase: Math.random() * Math.PI * 2, 
+                config: targetConfig
+            };
+            crowd.push(target);
+
+            for (let i = 0; i < peopleCount; i++) {
+                const speed = (0.5 + Math.random() * 1.5) * scaleMultiplier;
+                const angle = Math.random() * Math.PI * 2;
+                crowd.push({
+                    x: paddingX + Math.random() * (canvas.width - paddingX * 2),
+                    y: paddingY + Math.random() * (canvas.height - paddingY * 2),
+                    vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
+                    speed: speed, walkPhase: Math.random() * Math.PI * 2,
+                    config: generateRandomConfig()
+                });
+            }
+            crowd.sort((a, b) => a.y - b.y);
+        }
+
+        function drawCharacter(ctx, x, y, scale, config, walkPhase = 0) {
+            ctx.save();
+            const bobbingAmount = Math.abs(Math.sin(walkPhase)) * 4 * scale;
+            ctx.translate(x, y - bobbingAmount);
+            ctx.scale(scale, scale);
+
+            const headRadius = 12, bodyWidth = 24, bodyHeight = 35, legWidth = 8, legHeight = 25;
+
+            // Legs
+            ctx.fillStyle = config.pantsColor;
+            ctx.fillRect(-bodyWidth/2 + 2, 0, legWidth, legHeight);
+            ctx.fillRect(bodyWidth/2 - legWidth - 2, 0, legWidth, legHeight);
+
+            // Body
+            ctx.fillStyle = config.shirtColor1;
+            ctx.beginPath(); ctx.roundRect(-bodyWidth/2, -bodyHeight, bodyWidth, bodyHeight, 4); ctx.fill();
+
+            // Stripes
+            if (config.shirtPattern === 'striped') {
+                ctx.fillStyle = config.shirtColor2;
+                for (let i = -bodyHeight + 4; i < -4; i += 8) ctx.fillRect(-bodyWidth/2, i, bodyWidth, 4);
+            }
+
+            // Head
+            ctx.fillStyle = config.skinColor;
+            ctx.beginPath(); ctx.arc(0, -bodyHeight - headRadius, headRadius, 0, Math.PI * 2); ctx.fill();
+
+            // Hat/Hair
+            if (config.hasHat) {
+                ctx.fillStyle = config.hatColor1;
+                ctx.beginPath(); ctx.arc(0, -bodyHeight - headRadius - 2, headRadius + 1, Math.PI, 0); ctx.fill();
+                if (config.shirtPattern === 'striped') {
+                    ctx.fillStyle = config.hatColor2;
+                    ctx.fillRect(-headRadius-1, -bodyHeight - headRadius - 8, (headRadius+1)*2, 4);
+                }
+                ctx.fillStyle = config.hatColor1;
+                ctx.beginPath(); ctx.arc(0, -bodyHeight - headRadius * 2, 5, 0, Math.PI * 2); ctx.fill();
+            } else {
+                ctx.fillStyle = '#451a03';
+                ctx.beginPath(); ctx.arc(0, -bodyHeight - headRadius, headRadius, Math.PI, 0); ctx.fill();
+            }
+
+            // Glasses
+            if (config.hasGlasses) {
+                ctx.strokeStyle = '#000000'; ctx.lineWidth = 2; ctx.fillStyle = 'rgba(255,255,255,0.7)';
+                ctx.beginPath(); ctx.arc(-5, -bodyHeight - headRadius + 2, 4, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+                ctx.beginPath(); ctx.arc(5, -bodyHeight - headRadius + 2, 4, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(-1, -bodyHeight - headRadius + 2); ctx.lineTo(1, -bodyHeight - headRadius + 2); ctx.stroke();
+            }
+
+            // Eyes
+            ctx.fillStyle = '#000000';
+            ctx.beginPath(); ctx.arc(-4, -bodyHeight - headRadius + 2, 1.5, 0, Math.PI * 2);
+            ctx.arc(4, -bodyHeight - headRadius + 2, 1.5, 0, Math.PI * 2); ctx.fill();
+
+            ctx.restore();
+        }
+
+        function drawGame() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            for (let person of crowd) drawCharacter(ctx, person.x, person.y, scaleMultiplier, person.config, person.walkPhase);
+        }
+
+        // --- SISTEM DETEKSI SENTUHAN KHUSUS MULTI-PLATFORM (iOS/Android/PC) ---
+        function handleInput(e) {
+            if (!isPlaying) return;
+            
+            // Mencegah perilaku default browser saat layar disentuh (mencegah zoom/scroll)
+            if (e.cancelable) {
+                e.preventDefault();
+            }
+
+            let clientX, clientY;
+            
+            // Ekstrak koordinat baik dari sentuhan jari maupun klik mouse
+            if (e.touches && e.touches.length > 0) {
+                clientX = e.touches[0].clientX;
+                clientY = e.touches[0].clientY;
+            } else {
+                clientX = e.clientX;
+                clientY = e.clientY;
+            }
+
+            const rect = canvas.getBoundingClientRect();
+            const clickX = clientX - rect.left;
+            const clickY = clientY - rect.top;
+
+            const hitWidth = 35 * scaleMultiplier;
+            const hitHeight = 85 * scaleMultiplier;
+
+            const targetMinX = target.x - hitWidth;
+            const targetMaxX = target.x + hitWidth;
+            const targetMinY = target.y - hitHeight;
+            const targetMaxY = target.y + (30 * scaleMultiplier);
+
+            if (clickX >= targetMinX && clickX <= targetMaxX && 
+                clickY >= targetMinY && clickY <= targetMaxY) {
+                handleWin();
+            } else {
+                showWrongClick();
+            }
+        }
+
+        // Menggunakan touchstart untuk HP/iOS dan mousedown untuk PC
+        canvas.addEventListener('touchstart', handleInput, { passive: false });
+        canvas.addEventListener('mousedown', handleInput);
+        // -----------------------------------------------------------------------
+
+        function showWrongClick() {
+            wrongClickMsg.classList.remove('hidden');
+            setTimeout(() => { wrongClickMsg.classList.add('hidden'); }, 1000);
+        }
+
+        function handleWin() {
+            isPlaying = false; 
+            
+            ctx.save();
+            ctx.beginPath(); ctx.arc(target.x, target.y - (40 * scaleMultiplier), 60 * scaleMultiplier, 0, Math.PI * 2);
+            ctx.lineWidth = 4; ctx.strokeStyle = '#22c55e'; ctx.stroke();
+            
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.4)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+            drawCharacter(ctx, target.x, target.y, scaleMultiplier, target.config, 0);
+            ctx.restore();
+            
+            aiToast.classList.add('hidden');
+
+            setTimeout(() => {
+                currentLevel++;
+                nextLevelNum.textContent = currentLevel;
+                levelCompleteScreen.classList.remove('hidden');
+            }, 1500);
+        }
+
+    </script>
+</body>
+</html>
